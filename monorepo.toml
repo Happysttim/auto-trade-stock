@@ -1,0 +1,8 @@
+[workspace]
+members = [
+  "apps/backend",
+  "apps/frontend"
+]
+
+[workspace.metadata]
+name = "auto_trade_stock"

@@ -1,0 +1,59 @@
+:root {
+  font-family: "Segoe UI", sans-serif;
+  color: #f5f7fb;
+  background:
+    radial-gradient(circle at top, rgba(58, 92, 168, 0.45), transparent 42%),
+    linear-gradient(160deg, #081120 0%, #13233b 48%, #0a1628 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.hero-card {
+  width: min(720px, 100%);
+  padding: 40px;
+  border-radius: 28px;
+  background: rgba(9, 18, 34, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.28);
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: #7fb3ff;
+  font-size: 0.8rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  line-height: 1.05;
+}
+
+.description {
+  margin: 20px 0 0;
+  max-width: 56ch;
+  color: rgba(245, 247, 251, 0.78);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
