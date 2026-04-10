@@ -190,6 +190,14 @@ class Database:
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def clear_market_signals(self) -> None:
+        with self._lock, self.connection() as connection:
+            connection.execute("DELETE FROM market_signals")
+            connection.execute("DELETE FROM sqlite_sequence WHERE name = 'market_signals'")
+            connection.execute(
+                "DELETE FROM service_state WHERE state_key = 'last_processed_signal_id'"
+            )
+
     def get_market_signal(self, signal_id: int) -> dict[str, Any] | None:
         with self.connection() as connection:
             row = connection.execute(
@@ -291,6 +299,28 @@ class Database:
         with self._lock, self.connection() as connection:
             cursor = connection.execute(statement, values)
             return int(cursor.lastrowid)
+
+    def find_pending_order_proposal(
+        self,
+        *,
+        symbol: str,
+        proposal_type: str,
+        reason: str,
+    ) -> dict[str, Any] | None:
+        with self.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM order_proposals
+                WHERE symbol = ?
+                  AND proposal_type = ?
+                  AND status = 'pending_approval'
+                  AND reason = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (symbol, proposal_type, reason),
+            ).fetchone()
+        return None if row is None else self._row_to_dict(row)
 
     def list_order_proposals(self, *, limit: int = 100) -> list[dict[str, Any]]:
         with self.connection() as connection:

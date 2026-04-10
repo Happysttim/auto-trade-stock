@@ -31,6 +31,15 @@ class MarketDataService:
             return f"{normalized}.KS"
         return symbol
 
+    def _is_stable_volume(self, *, recent_volume: int, average_volume: float, volume_ratio: float) -> bool:
+        # For on-demand keyword recommendations, prefer names with relatively even participation.
+        return (
+            recent_volume > 0
+            and average_volume > 0
+            and 0.6 <= volume_ratio <= 1.8
+            and volume_ratio < self.settings.max_volume_spike_ratio
+        )
+
     def resolve_company_name(self, symbol: str) -> str:
         normalized_symbol = self._normalize_symbol_key(symbol)
         mapped_name = self.settings.watchlist_name_map.get(normalized_symbol)
@@ -122,6 +131,11 @@ class MarketDataService:
                     average_volume_20d=avg_volume,
                     volume_ratio=volume_ratio,
                     suspicious_volume=volume_ratio >= self.settings.max_volume_spike_ratio,
+                    stable_volume=self._is_stable_volume(
+                        recent_volume=recent_volume,
+                        average_volume=avg_volume,
+                        volume_ratio=volume_ratio,
+                    ),
                     price_change_pct=price_change_pct,
                 )
             except Exception:

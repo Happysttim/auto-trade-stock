@@ -3,7 +3,12 @@ from __future__ import annotations
 from openai import OpenAI
 
 from ..config import Settings
-from ..prompts import TRADE_SYSTEM_PROMPT, build_user_prompt
+from ..prompts import (
+    KEYWORD_ANALYSIS_SYSTEM_PROMPT,
+    TRADE_SYSTEM_PROMPT,
+    build_keyword_user_prompt,
+    build_user_prompt,
+)
 from ..schemas import AITradePlan, AccountSnapshot, MarketWatchSnapshot, NewsArticle
 
 
@@ -78,6 +83,40 @@ class OpenAIAnalysisService:
                 model=self.settings.openai_model,
                 input=[
                     {"role": "system", "content": TRADE_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                text_format=AITradePlan,
+            )
+        except Exception as exc:
+            raise self._normalize_error(exc) from exc
+
+        if response.output_parsed is None:
+            raise AnalysisServiceError("OpenAI returned no structured response.")
+        return response.output_parsed
+
+    def analyze_keyword(
+        self,
+        *,
+        now_iso: str,
+        keyword: str,
+        articles: list[NewsArticle],
+        watchlist: list[MarketWatchSnapshot],
+        account: AccountSnapshot,
+    ) -> AITradePlan:
+        user_prompt = build_keyword_user_prompt(
+            now_iso=now_iso,
+            keyword=keyword,
+            articles=articles,
+            watchlist=watchlist,
+            account=account,
+            max_total_exposure_ratio=self.settings.account_max_exposure_ratio,
+        )
+
+        try:
+            response = self.client.responses.parse(
+                model=self.settings.openai_model,
+                input=[
+                    {"role": "system", "content": KEYWORD_ANALYSIS_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
                 ],
                 text_format=AITradePlan,

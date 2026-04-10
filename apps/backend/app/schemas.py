@@ -40,6 +40,7 @@ class MarketWatchSnapshot:
     average_volume_20d: float
     volume_ratio: float
     suspicious_volume: bool
+    stable_volume: bool
     price_change_pct: float
     max_affordable_quantity: int = 0
     affordable: bool = False
@@ -53,6 +54,7 @@ class MarketWatchSnapshot:
             "average_volume_20d": round(self.average_volume_20d, 2),
             "volume_ratio": round(self.volume_ratio, 4),
             "suspicious_volume": self.suspicious_volume,
+            "stable_volume": self.stable_volume,
             "price_change_pct": round(self.price_change_pct, 4),
             "max_affordable_quantity": self.max_affordable_quantity,
             "affordable": self.affordable,

@@ -81,6 +81,59 @@ class NewsService:
 
         return sources
 
+    def _keyword_sources(self, keyword: str) -> list[NewsSourceConfig]:
+        normalized_keyword = keyword.strip()
+        if not normalized_keyword:
+            return []
+
+        quoted_keyword = f'"{normalized_keyword}"'
+        return [
+            NewsSourceConfig(
+                name="Keyword Reuters",
+                url=_google_news_rss(
+                    f'when:7d ({quoted_keyword}) (stock OR earnings OR market OR outlook OR regulation) site:reuters.com',
+                    hl="en-US",
+                    gl="US",
+                    ceid="US:en",
+                ),
+                region="global",
+                topic="keyword",
+            ),
+            NewsSourceConfig(
+                name="Keyword CNBC",
+                url=_google_news_rss(
+                    f'when:7d ({quoted_keyword}) (stock OR earnings OR semiconductor OR market OR guidance) site:cnbc.com',
+                    hl="en-US",
+                    gl="US",
+                    ceid="US:en",
+                ),
+                region="global",
+                topic="keyword",
+            ),
+            NewsSourceConfig(
+                name="Keyword Yonhap",
+                url=_google_news_rss(
+                    f'when:7d ({quoted_keyword}) (증시 OR 주가 OR 실적 OR 전망 OR 공급망 OR 규제) site:yna.co.kr',
+                    hl="ko",
+                    gl="KR",
+                    ceid="KR:ko",
+                ),
+                region="korea",
+                topic="keyword",
+            ),
+            NewsSourceConfig(
+                name="Keyword Maeil",
+                url=_google_news_rss(
+                    f'when:7d ({quoted_keyword}) (증시 OR 시장 OR 실적 OR 전망 OR 수급 OR 정책) site:mk.co.kr',
+                    hl="ko",
+                    gl="KR",
+                    ceid="KR:ko",
+                ),
+                region="korea",
+                topic="keyword",
+            ),
+        ]
+
     def _parse_published_at(self, entry: feedparser.FeedParserDict) -> datetime:
         for key in ("published", "updated"):
             if entry.get(key):
@@ -190,3 +243,42 @@ class NewsService:
             signature=current_signature,
             mode="fallback",
         )
+
+    def collect_articles_for_keyword(self, *, keyword: str, limit: int | None = None) -> list[NewsArticle]:
+        selected_limit = max(1, limit or self.settings.news_max_articles)
+        articles: list[NewsArticle] = []
+        seen_ids: set[str] = set()
+
+        for source in self._keyword_sources(keyword):
+            try:
+                response = requests.get(source.url, timeout=self.settings.request_timeout_seconds)
+                response.raise_for_status()
+                feed = feedparser.parse(response.content)
+            except Exception:
+                continue
+
+            for entry in feed.entries[: selected_limit]:
+                title = _normalize_text(entry.get("title", ""))
+                url = entry.get("link", "")
+                summary = _normalize_text(entry.get("summary", ""))
+                published_at = self._parse_published_at(entry)
+                article_id = hashlib.sha1(f"{title}|{url}".encode("utf-8")).hexdigest()
+                if not title or not url or article_id in seen_ids:
+                    continue
+
+                seen_ids.add(article_id)
+                articles.append(
+                    NewsArticle(
+                        article_id=article_id,
+                        title=title,
+                        source_name=source.name,
+                        url=url,
+                        published_at=published_at,
+                        summary=summary,
+                        region=source.region,
+                        topic=source.topic,
+                    )
+                )
+
+        articles.sort(key=lambda item: item.published_at, reverse=True)
+        return articles[:selected_limit]

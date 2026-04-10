@@ -72,6 +72,24 @@ def get_signals():
     return jsonify(get_container().repository.list_market_signals(limit=limit))
 
 
+@api_blueprint.post("/api/analysis/keyword")
+def analyze_keyword():
+    container = get_container()
+    payload = request.get_json(silent=True) or {}
+    keyword = str(payload.get("keyword") or "").strip()
+    if not keyword:
+        return _json_error("키워드를 입력해주세요.", 400)
+
+    try:
+        result = container.trading_engine.analyze_keyword(keyword=keyword)
+    except ValueError as exc:
+        return _json_error(str(exc), 400)
+    except Exception as exc:
+        return _task_error(container, "Keyword analysis", exc)
+
+    return jsonify({"status": "ok", **result})
+
+
 @api_blueprint.post("/api/signals/<int:signal_id>/execute")
 def execute_signal(signal_id: int):
     container = get_container()

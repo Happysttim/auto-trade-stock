@@ -7,7 +7,7 @@ from typing import Any
 
 from ..config import Settings
 from ..database import Database
-from ..schemas import AccountSnapshot
+from ..schemas import AccountSnapshot, MarketWatchSnapshot
 from .kiwoom_service import KiwoomBrokerService
 from .market_data_service import MarketDataService
 from .market_hours import MarketClock
@@ -86,6 +86,223 @@ class TradingEngine:
             (holding.symbol, holding.company_name or self.market_data_service.resolve_company_name(holding.symbol))
             for holding in prioritized[:5]
         ]
+
+    def _normalize_symbol_key(self, symbol: str) -> str:
+        normalized = symbol.strip().upper()
+        if normalized.endswith(".KS") or normalized.endswith(".KQ"):
+            normalized = normalized.split(".", 1)[0]
+        return normalized
+
+    def _watchlist_snapshot_map(
+        self,
+        watchlist: list[MarketWatchSnapshot],
+    ) -> dict[str, MarketWatchSnapshot]:
+        return {
+            self._normalize_symbol_key(snapshot.symbol): snapshot
+            for snapshot in watchlist
+        }
+
+    def _keyword_reason(self, keyword: str) -> str:
+        return f"사용자가 요청한 키워드 '{keyword}' 즉시 분석에서 자동 등록된 주문 제안입니다."
+
+    def _text_contains_any(self, text: str, candidates: list[str]) -> bool:
+        lowered_text = text.casefold()
+        return any(candidate and candidate.casefold() in lowered_text for candidate in candidates)
+
+    def _has_direct_keyword_relevance(
+        self,
+        *,
+        requested_keyword: str,
+        symbol: str,
+        company_name: str,
+        recommendation_keyword: str,
+        rationale: str,
+        article_lookup: dict[str, Any],
+        source_article_ids: list[str],
+    ) -> bool:
+        normalized_symbol = self._normalize_symbol_key(symbol)
+        company_candidates = [company_name.strip(), normalized_symbol]
+        keyword_candidates = [requested_keyword.strip(), recommendation_keyword.strip()]
+
+        rationale_supports_keyword = self._text_contains_any(rationale, keyword_candidates)
+        rationale_supports_company = self._text_contains_any(rationale, company_candidates)
+
+        article_supports_company = False
+        article_supports_keyword = False
+        for article_id in source_article_ids:
+            article = article_lookup.get(article_id)
+            if article is None:
+                continue
+            article_text = f"{article.title} {article.summary}".strip()
+            if self._text_contains_any(article_text, keyword_candidates):
+                article_supports_keyword = True
+            if self._text_contains_any(article_text, company_candidates):
+                article_supports_company = True
+
+        return article_supports_company and (article_supports_keyword or (rationale_supports_keyword and rationale_supports_company))
+
+    def _register_keyword_proposal(
+        self,
+        *,
+        keyword: str,
+        recommendation: dict[str, Any],
+    ) -> int | None:
+        if recommendation["signal_type"] not in {"buy", "sell"}:
+            return None
+        if not recommendation["executable"]:
+            return None
+        if recommendation["suggested_quantity"] is None or recommendation["suggested_amount"] is None:
+            return None
+        if recommendation["reference_price"] is None:
+            return None
+
+        reason = self._keyword_reason(keyword)
+        existing = self.repository.find_pending_order_proposal(
+            symbol=str(recommendation["symbol"]),
+            proposal_type=str(recommendation["signal_type"]),
+            reason=reason,
+        )
+        if existing is not None:
+            return int(existing["id"])
+
+        return self.repository.save_order_proposal(
+            {
+                "signal_ids": [],
+                "symbol": recommendation["symbol"],
+                "company_name": recommendation["company_name"],
+                "proposal_type": recommendation["signal_type"],
+                "quantity": int(recommendation["suggested_quantity"]),
+                "reference_price": float(recommendation["reference_price"]),
+                "target_amount": float(recommendation["suggested_amount"]),
+                "score": int(recommendation["score"]),
+                "hold_days": int(recommendation["hold_days"]),
+                "rationale": str(recommendation["rationale"]),
+                "status": "pending_approval",
+                "reason": reason,
+            }
+        )
+
+    def _build_keyword_recommendation(
+        self,
+        *,
+        requested_keyword: str,
+        recommendation: Any,
+        account: AccountSnapshot,
+        watchlist_map: dict[str, MarketWatchSnapshot],
+        article_lookup: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        normalized_symbol = self._normalize_symbol_key(str(recommendation.symbol))
+        resolved_symbol = self._normalize_orderable_symbol(normalized_symbol)
+        watch_snapshot = watchlist_map.get(normalized_symbol)
+        holding = account.holding_for_symbol(normalized_symbol)
+        company_name = self._resolve_company_name(normalized_symbol, account=account) or recommendation.company_name
+
+        if not self._has_direct_keyword_relevance(
+            requested_keyword=requested_keyword,
+            symbol=normalized_symbol,
+            company_name=company_name,
+            recommendation_keyword=str(recommendation.keyword),
+            rationale=str(recommendation.rationale),
+            article_lookup=article_lookup,
+            source_article_ids=list(recommendation.source_article_ids),
+        ):
+            return None
+
+        reference_price = self.market_data_service.get_latest_price(normalized_symbol)
+        if reference_price <= 0:
+            if holding is not None and holding.current_price > 0:
+                reference_price = holding.current_price
+            elif watch_snapshot is not None and watch_snapshot.last_close > 0:
+                reference_price = watch_snapshot.last_close
+
+        suggested_quantity: int | None = None
+        suggested_amount: float | None = None
+        executable = False
+        execution_block_reason: str | None = None
+
+        if recommendation.signal_type == "buy":
+            if resolved_symbol is None:
+                execution_block_reason = "키움 국내 주식 주문 코드가 아닌 종목입니다."
+            elif watch_snapshot is None:
+                execution_block_reason = "매수 가능 후보 데이터가 없어 추천 수량을 계산할 수 없습니다."
+            elif recommendation.suspicious_volume or watch_snapshot.suspicious_volume:
+                execution_block_reason = "이상 거래량이 감지되어 매수 추천에서 제외되었습니다."
+            elif not watch_snapshot.stable_volume:
+                execution_block_reason = "거래량이 일정하지 않아 매수 추천 조건을 충족하지 않습니다."
+            elif watch_snapshot.max_affordable_quantity < 1:
+                execution_block_reason = "현재 계좌 예수금으로 최소 1주도 매수할 수 없습니다."
+            elif reference_price <= 0:
+                execution_block_reason = "기준 가격을 확인할 수 없어 매수 수량을 계산할 수 없습니다."
+            else:
+                available_buying_power = self._available_buying_power(account)
+                target_budget = min(
+                    available_buying_power,
+                    max(reference_price, account.total_equity * float(recommendation.allocation_ratio)),
+                )
+                suggested_quantity = min(
+                    watch_snapshot.max_affordable_quantity,
+                    max(1, floor(target_budget / reference_price)),
+                )
+                if suggested_quantity <= 0:
+                    execution_block_reason = "계산 결과 매수 가능 수량이 0주입니다."
+                else:
+                    suggested_amount = round(suggested_quantity * reference_price, 2)
+                    executable = True
+        elif recommendation.signal_type == "sell":
+            if resolved_symbol is None:
+                execution_block_reason = "키움 국내 주식 주문 코드가 아닌 종목입니다."
+            elif holding is None or holding.quantity <= 0:
+                execution_block_reason = "현재 계좌에 보유 중인 종목이 아니라 매도 추천을 만들 수 없습니다."
+            elif reference_price <= 0:
+                execution_block_reason = "기준 가격을 확인할 수 없어 매도 수량을 계산할 수 없습니다."
+            else:
+                available_quantity = holding.available_quantity or holding.quantity
+                target_value = max(reference_price, account.total_equity * abs(float(recommendation.allocation_ratio)))
+                suggested_quantity = min(available_quantity, max(1, floor(target_value / reference_price)))
+                if suggested_quantity <= 0:
+                    execution_block_reason = "계산 결과 매도 가능 수량이 0주입니다."
+                else:
+                    suggested_amount = round(suggested_quantity * reference_price, 2)
+                    executable = True
+        else:
+            execution_block_reason = "근거가 충분하지 않아 관망으로 분류되었습니다."
+
+        if recommendation.signal_type in {"buy", "sell"} and not executable:
+            return None
+
+        return {
+            "symbol": resolved_symbol or normalized_symbol,
+            "company_name": company_name,
+            "keyword": recommendation.keyword,
+            "score": int(recommendation.score),
+            "signal_type": recommendation.signal_type,
+            "allocation_ratio": float(recommendation.allocation_ratio),
+            "hold_days": int(recommendation.hold_days),
+            "recent_volume": int(recommendation.recent_volume),
+            "volume_ratio": float(recommendation.volume_ratio),
+            "suspicious_volume": bool(recommendation.suspicious_volume),
+            "stable_volume": bool(watch_snapshot.stable_volume) if watch_snapshot is not None else False,
+            "recorded_date": recommendation.recorded_date,
+            "rationale": recommendation.rationale,
+            "reference_price": round(reference_price, 2) if reference_price > 0 else None,
+            "suggested_quantity": suggested_quantity,
+            "suggested_amount": suggested_amount,
+            "max_affordable_quantity": watch_snapshot.max_affordable_quantity if watch_snapshot is not None else 0,
+            "currently_held_quantity": holding.quantity if holding is not None else 0,
+            "executable": executable,
+            "execution_block_reason": execution_block_reason,
+            "registered_proposal_id": None,
+            "source_names": [
+                article_lookup[article_id].source_name
+                for article_id in recommendation.source_article_ids
+                if article_id in article_lookup
+            ],
+            "source_urls": [
+                article_lookup[article_id].url
+                for article_id in recommendation.source_article_ids
+                if article_id in article_lookup
+            ],
+        }
 
     def _build_proposal_payload_from_signal(
         self,
@@ -252,6 +469,7 @@ class TradingEngine:
 
         self.repository.set_state("last_news_signature", selection.signature)
         self.repository.set_state("last_ai_summary", plan.market_sentiment_summary)
+        self.repository.clear_market_signals()
 
         created = 0
         article_lookup = {article.article_id: article for article in selection.articles}
@@ -295,6 +513,220 @@ class TradingEngine:
             self._log(event_type="scan", message=plan.skip_reason)
 
         return created
+
+    def analyze_keyword(self, *, keyword: str) -> dict[str, Any]:
+        normalized_keyword = keyword.strip()
+        if len(normalized_keyword) < 2:
+            raise ValueError("키워드는 2글자 이상 입력해주세요.")
+
+        now = self.clock.now()
+        account = self.sync_holdings()
+        articles = self.news_service.collect_articles_for_keyword(
+            keyword=normalized_keyword,
+            limit=self.settings.news_max_articles,
+        )
+        if not articles:
+            return {
+                "keyword": normalized_keyword,
+                "analyzed_at": now.isoformat(),
+                "summary": f"'{normalized_keyword}' 관련 최신 뉴스를 찾지 못했습니다.",
+                "skip_reason": "관련 최신 뉴스가 충분하지 않습니다.",
+                "articles": [],
+                "recommendations": [],
+                "account": {
+                    "account_no": account.account_no,
+                    "cash_balance": round(account.cash_balance, 2),
+                    "holdings_value": round(account.holdings_value, 2),
+                    "total_equity": round(account.total_equity, 2),
+                    "available_buying_power": round(self._available_buying_power(account), 2),
+                    "holding_count": len(account.holdings),
+                },
+            }
+
+        if not self.openai_service.enabled:
+            raise RuntimeError("OPENAI_API_KEY (or OPEN_API_KEY) is not configured.")
+
+        watchlist = self.market_data_service.build_watchlist(
+            buying_power=self._available_buying_power(account),
+            held_symbols={holding.symbol for holding in account.holdings},
+            preferred_symbols=[holding.symbol for holding in account.holdings],
+        )
+        watchlist_map = self._watchlist_snapshot_map(watchlist)
+        plan = self.openai_service.analyze_keyword(
+            now_iso=now.isoformat(),
+            keyword=normalized_keyword,
+            articles=articles,
+            watchlist=watchlist,
+            account=account,
+        )
+
+        article_lookup = {article.article_id: article for article in articles}
+        recommendations = [
+            payload
+            for payload in (
+                self._build_keyword_recommendation(
+                    recommendation=recommendation,
+                    account=account,
+                    watchlist_map=watchlist_map,
+                    article_lookup=article_lookup,
+                )
+                for recommendation in plan.recommendations
+            )
+            if payload is not None
+        ]
+
+        self._log(
+            event_type="keyword-analysis",
+            message=f"Completed keyword analysis for {normalized_keyword}.",
+            metadata={
+                "keyword": normalized_keyword,
+                "article_count": len(articles),
+                "recommendation_count": len(recommendations),
+            },
+        )
+
+        return {
+            "keyword": normalized_keyword,
+            "analyzed_at": now.isoformat(),
+            "summary": plan.market_sentiment_summary,
+            "skip_reason": plan.skip_reason,
+            "articles": [
+                {
+                    "article_id": article.article_id,
+                    "title": article.title,
+                    "source_name": article.source_name,
+                    "url": article.url,
+                    "published_at": article.published_at.isoformat(),
+                    "summary": article.summary,
+                    "region": article.region,
+                    "topic": article.topic,
+                }
+                for article in articles
+            ],
+            "recommendations": recommendations,
+            "account": {
+                "account_no": account.account_no,
+                "cash_balance": round(account.cash_balance, 2),
+                "holdings_value": round(account.holdings_value, 2),
+                "total_equity": round(account.total_equity, 2),
+                "available_buying_power": round(self._available_buying_power(account), 2),
+                "holding_count": len(account.holdings),
+            },
+        }
+
+    def analyze_keyword(self, *, keyword: str) -> dict[str, Any]:
+        normalized_keyword = keyword.strip()
+        if len(normalized_keyword) < 2:
+            raise ValueError("키워드는 2글자 이상 입력해주세요.")
+
+        now = self.clock.now()
+        account = self.sync_holdings()
+        articles = self.news_service.collect_articles_for_keyword(
+            keyword=normalized_keyword,
+            limit=self.settings.news_max_articles,
+        )
+        if not articles:
+            return {
+                "keyword": normalized_keyword,
+                "analyzed_at": now.isoformat(),
+                "summary": f"'{normalized_keyword}' 관련 최신 뉴스를 찾지 못했습니다.",
+                "skip_reason": "관련 최신 뉴스가 충분하지 않습니다.",
+                "articles": [],
+                "recommendations": [],
+                "registered_proposals": [],
+                "account": {
+                    "account_no": account.account_no,
+                    "cash_balance": round(account.cash_balance, 2),
+                    "holdings_value": round(account.holdings_value, 2),
+                    "total_equity": round(account.total_equity, 2),
+                    "available_buying_power": round(self._available_buying_power(account), 2),
+                    "holding_count": len(account.holdings),
+                },
+            }
+
+        if not self.openai_service.enabled:
+            raise RuntimeError("OPENAI_API_KEY (or OPEN_API_KEY) is not configured.")
+
+        watchlist = self.market_data_service.build_watchlist(
+            buying_power=self._available_buying_power(account),
+            held_symbols={holding.symbol for holding in account.holdings},
+            preferred_symbols=[holding.symbol for holding in account.holdings],
+        )
+        watchlist_map = self._watchlist_snapshot_map(watchlist)
+        plan = self.openai_service.analyze_keyword(
+            now_iso=now.isoformat(),
+            keyword=normalized_keyword,
+            articles=articles,
+            watchlist=watchlist,
+            account=account,
+        )
+
+        article_lookup = {article.article_id: article for article in articles}
+        recommendations = [
+            payload
+            for payload in (
+                self._build_keyword_recommendation(
+                    requested_keyword=normalized_keyword,
+                    recommendation=recommendation,
+                    account=account,
+                    watchlist_map=watchlist_map,
+                    article_lookup=article_lookup,
+                )
+                for recommendation in plan.recommendations
+            )
+            if payload is not None
+        ]
+
+        registered_proposals: list[int] = []
+        for recommendation in recommendations:
+            proposal_id = self._register_keyword_proposal(
+                keyword=normalized_keyword,
+                recommendation=recommendation,
+            )
+            recommendation["registered_proposal_id"] = proposal_id
+            if proposal_id is not None:
+                registered_proposals.append(proposal_id)
+
+        self._log(
+            event_type="keyword-analysis",
+            message=f"Completed keyword analysis for {normalized_keyword}.",
+            metadata={
+                "keyword": normalized_keyword,
+                "article_count": len(articles),
+                "recommendation_count": len(recommendations),
+                "registered_proposal_count": len(registered_proposals),
+            },
+        )
+
+        return {
+            "keyword": normalized_keyword,
+            "analyzed_at": now.isoformat(),
+            "summary": plan.market_sentiment_summary,
+            "skip_reason": plan.skip_reason,
+            "articles": [
+                {
+                    "article_id": article.article_id,
+                    "title": article.title,
+                    "source_name": article.source_name,
+                    "url": article.url,
+                    "published_at": article.published_at.isoformat(),
+                    "summary": article.summary,
+                    "region": article.region,
+                    "topic": article.topic,
+                }
+                for article in articles
+            ],
+            "recommendations": recommendations,
+            "registered_proposals": registered_proposals,
+            "account": {
+                "account_no": account.account_no,
+                "cash_balance": round(account.cash_balance, 2),
+                "holdings_value": round(account.holdings_value, 2),
+                "total_equity": round(account.total_equity, 2),
+                "available_buying_power": round(self._available_buying_power(account), 2),
+                "holding_count": len(account.holdings),
+            },
+        }
 
     def build_order_proposals(self, *, account_snapshot: AccountSnapshot | None = None) -> int:
         pending = self.repository.list_unprocessed_signals()

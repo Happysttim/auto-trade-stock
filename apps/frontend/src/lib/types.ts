@@ -104,3 +104,61 @@ export type DashboardData = {
   logs: LogRecord[];
   signals: SignalRecord[];
 };
+
+export type KeywordArticle = {
+  article_id: string;
+  title: string;
+  source_name: string;
+  url: string;
+  published_at: string;
+  summary: string;
+  region: string;
+  topic: string;
+};
+
+export type KeywordRecommendation = {
+  symbol: string;
+  company_name: string;
+  keyword: string;
+  score: number;
+  signal_type: "buy" | "sell" | "hold";
+  allocation_ratio: number;
+  hold_days: number;
+  recent_volume: number;
+  volume_ratio: number;
+  suspicious_volume: boolean;
+  stable_volume: boolean;
+  recorded_date: string;
+  rationale: string;
+  reference_price: number | null;
+  suggested_quantity: number | null;
+  suggested_amount: number | null;
+  max_affordable_quantity: number;
+  currently_held_quantity: number;
+  executable: boolean;
+  execution_block_reason: string | null;
+  registered_proposal_id: number | null;
+  source_names: string[];
+  source_urls: string[];
+};
+
+export type KeywordAnalysisAccount = {
+  account_no: string | null;
+  cash_balance: number;
+  holdings_value: number;
+  total_equity: number;
+  available_buying_power: number;
+  holding_count: number;
+};
+
+export type KeywordAnalysisResult = {
+  status: "ok";
+  keyword: string;
+  analyzed_at: string;
+  summary: string;
+  skip_reason: string | null;
+  articles: KeywordArticle[];
+  recommendations: KeywordRecommendation[];
+  registered_proposals: number[];
+  account: KeywordAnalysisAccount;
+};
