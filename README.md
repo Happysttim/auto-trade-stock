@@ -94,7 +94,7 @@ auto-trade-stock/
 ### 1. 가상환경 생성 및 패키지 설치
 
 ```powershell
-cd E:\dev\auto-trade-stock\apps\backend
+cd auto-trade-stock\apps\backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -163,7 +163,7 @@ KIWOOM_ORDER_BODY_JSON={"acct_no":"{account_no}"}
 ## 백엔드 실행
 
 ```powershell
-cd E:\dev\auto-trade-stock\apps\backend
+cd auto-trade-stock\apps\backend
 .\.venv\Scripts\Activate.ps1
 python run.py
 ```
@@ -250,7 +250,7 @@ npm run dev
 ## 빠른 시작
 
 ```powershell
-cd E:\dev\auto-trade-stock\apps\backend
+cd auto-trade-stock\apps\backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -259,7 +259,7 @@ python run.py
 ```
 
 ```powershell
-cd E:\dev\auto-trade-stock\apps\frontend
+cd auto-trade-stock\apps\frontend
 npm install
 npm run dev
 ```
