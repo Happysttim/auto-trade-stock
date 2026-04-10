@@ -269,8 +269,11 @@ def load_settings() -> Settings:
         kiwoom_request_timeout_seconds=_int_env("KIWOOM_REQUEST_TIMEOUT_SECONDS", 20),
         kiwoom_fallback_cash_balance=_float_env("KIWOOM_FALLBACK_CASH_BALANCE", 0.0),
         kiwoom_accounts_body=_json_env("KIWOOM_ACCOUNTS_BODY_JSON", {}),
-        kiwoom_cash_body=_json_env("KIWOOM_CASH_BODY_JSON", {"acct_no": "{account_no}"}),
-        kiwoom_holdings_body=_json_env("KIWOOM_HOLDINGS_BODY_JSON", {"acct_no": "{account_no}"}),
+        kiwoom_cash_body=_json_env("KIWOOM_CASH_BODY_JSON", {"acct_no": "{account_no}", "qry_tp": "1"}),
+        kiwoom_holdings_body=_json_env(
+            "KIWOOM_HOLDINGS_BODY_JSON",
+            {"acct_no": "{account_no}", "qry_tp": "1", "dmst_stex_tp": "{exchange_code}"},
+        ),
         kiwoom_order_body=_json_env("KIWOOM_ORDER_BODY_JSON", {"acct_no": "{account_no}"}),
         news_sources=_default_news_sources(),
     )

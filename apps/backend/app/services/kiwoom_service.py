@@ -29,6 +29,15 @@ def _parse_float(value: Any) -> float:
         return 0.0
 
 
+def _normalize_stock_code(value: Any) -> str:
+    normalized = str(value or "").strip().upper()
+    if normalized.startswith("A") and len(normalized) == 7 and normalized[1:].isdigit():
+        normalized = normalized[1:]
+    if normalized.endswith(".KS") or normalized.endswith(".KQ"):
+        normalized = normalized.split(".", 1)[0]
+    return normalized
+
+
 class _SafeTemplateDict(dict[str, Any]):
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
@@ -173,7 +182,7 @@ class KiwoomBrokerService:
                 item,
                 ("rmnd_qty", "qty", "holding_qty", "own_qty", "bal_qty", "quantity"),
             )
-            normalized_symbol = str(symbol or "").strip().upper()
+            normalized_symbol = _normalize_stock_code(symbol)
             quantity_value = int(_parse_float(quantity))
             if not normalized_symbol or quantity_value <= 0:
                 continue
@@ -197,7 +206,7 @@ class KiwoomBrokerService:
             )
             if market_value <= 0 and current_price > 0:
                 market_value = current_price * quantity_value
-            pnl_raw = self._value_by_aliases(item, ("evlt_pfls_amt", "pnl", "profit_loss"))
+            pnl_raw = self._value_by_aliases(item, ("evlt_pfls_amt", "pl_amt", "pnl", "profit_loss"))
             pnl = None if pnl_raw is None else _parse_float(pnl_raw)
             company_name = str(
                 self._value_by_aliases(item, ("stk_nm", "item_nm", "name", "company_name")) or normalized_symbol
@@ -219,6 +228,17 @@ class KiwoomBrokerService:
         holdings.sort(key=lambda item: item.market_value, reverse=True)
         return holdings
 
+    def _extract_cash_balance(self, payload: dict[str, Any]) -> float:
+        # Prefer immediately usable cash-style fields so total_equity does not double-count holdings.
+        for aliases in (
+            ("d2_entra", "ord_psbl_cash", "ord_psbl_amt", "cash_balance", "cash"),
+            ("entr",),
+        ):
+            candidates = self._extract_numeric_candidates(payload, aliases)
+            if candidates:
+                return max(candidates)
+        return self.settings.kiwoom_fallback_cash_balance
+
     def fetch_account_numbers(self) -> list[str]:
         payload = self._post(
             path="/api/dostk/acnt",
@@ -238,36 +258,20 @@ class KiwoomBrokerService:
         if not account_no:
             raise RuntimeError("Unable to resolve a Kiwoom account number.")
 
-        cash_payload = _render_templates(
-            self.settings.kiwoom_cash_body,
-            {"account_no": account_no},
-        )
         holdings_payload = _render_templates(
             self.settings.kiwoom_holdings_body,
-            {"account_no": account_no},
+            {
+                "account_no": account_no,
+                "exchange_code": self.settings.kiwoom_exchange_code,
+            },
         )
-
-        cash_balance = self.settings.kiwoom_fallback_cash_balance
-        try:
-            cash_response = self._post(
-                path="/api/dostk/acnt",
-                api_id="kt00001",
-                body=cash_payload,
-            )
-            candidates = self._extract_numeric_candidates(
-                cash_response,
-                ("ord_psbl_cash", "dnca_tot_amt", "cash_balance", "cash", "ord_psbl_amt"),
-            )
-            if candidates:
-                cash_balance = max(candidates)
-        except Exception:
-            cash_balance = self.settings.kiwoom_fallback_cash_balance
 
         holdings_response = self._post(
             path="/api/dostk/acnt",
-            api_id="kt00017",
+            api_id="kt00004",
             body=holdings_payload,
         )
+        cash_balance = self._extract_cash_balance(holdings_response)
         holdings = self._parse_holdings(holdings_response, account_no)
 
         return AccountSnapshot(
