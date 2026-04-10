@@ -1,6 +1,7 @@
 import type {
   DashboardData,
   HoldingRecord,
+  KeywordAnalysisResult,
   LogRecord,
   OrderProposal,
   ServiceStatus,
@@ -157,5 +158,15 @@ export async function buildProposalsNow(): Promise<ManualTaskResult> {
 export function syncHoldingsNow(): Promise<ManualTaskResult> {
   return fetchJson<ManualTaskResult>("/api/tasks/sync-holdings", {
     method: "POST",
+  });
+}
+
+export function runKeywordAnalysis(keyword: string): Promise<KeywordAnalysisResult> {
+  return fetchJson<KeywordAnalysisResult>("/api/analysis/keyword", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ keyword }),
   });
 }
