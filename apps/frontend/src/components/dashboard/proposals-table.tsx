@@ -65,8 +65,8 @@ export function ProposalsTable({
             <ListChecks className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle>Approval Queue</CardTitle>
-            <CardDescription>AI-generated Kiwoom order proposals waiting for user approval</CardDescription>
+            <CardTitle>승인 대기 주문</CardTitle>
+            <CardDescription>사용자 확인을 기다리는 AI 기반 키움 주문 제안</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -74,21 +74,21 @@ export function ProposalsTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Stock</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Quantity</TableHead>
-              <TableHead>Reference</TableHead>
-              <TableHead>Target</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+              <TableHead>종목</TableHead>
+              <TableHead>유형</TableHead>
+              <TableHead>수량</TableHead>
+              <TableHead>기준가</TableHead>
+              <TableHead>예상 금액</TableHead>
+              <TableHead>상태</TableHead>
+              <TableHead>생성 시각</TableHead>
+              <TableHead className="text-right">작업</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
                 <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                  Loading approval proposals...
+                  주문 제안을 불러오는 중입니다...
                 </TableCell>
               </TableRow>
             ) : null}
@@ -96,7 +96,7 @@ export function ProposalsTable({
             {!loading && proposals.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                  No proposals are waiting for review.
+                  검토를 기다리는 주문 제안이 없습니다.
                 </TableCell>
               </TableRow>
             ) : null}
@@ -123,14 +123,21 @@ export function ProposalsTable({
                           <ArrowDownRight className="h-3.5 w-3.5" />
                         )}
                       </span>
-                      {proposal.proposal_type}
+                      {proposal.proposal_type === "buy" ? "매수" : "매도"}
                     </Badge>
                   </TableCell>
                   <TableCell>{proposal.quantity.toLocaleString("ko-KR")}</TableCell>
                   <TableCell>{formatCurrency(proposal.reference_price)}</TableCell>
                   <TableCell>{formatCurrency(proposal.target_amount)}</TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(proposal.status)}>{proposal.status}</Badge>
+                    <Badge variant={statusVariant(proposal.status)}>
+                      {{
+                        pending_approval: "승인 대기",
+                        executed: "주문 완료",
+                        failed: "실패",
+                        rejected: "거절",
+                      }[proposal.status] ?? proposal.status}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{formatDateTime(proposal.created_at)}</TableCell>
                   <TableCell>
@@ -139,7 +146,7 @@ export function ProposalsTable({
                         size="icon"
                         disabled={!isPending || !marketOpen || isBusy}
                         onClick={async () => onApprove(proposal.id)}
-                        aria-label={`Approve proposal ${proposal.id}`}
+                        aria-label={`제안 ${proposal.id} 승인`}
                       >
                         <Check className="h-4 w-4" />
                       </Button>
@@ -148,7 +155,7 @@ export function ProposalsTable({
                         size="icon"
                         disabled={!isPending || isBusy}
                         onClick={async () => onReject(proposal.id)}
-                        aria-label={`Reject proposal ${proposal.id}`}
+                        aria-label={`제안 ${proposal.id} 거절`}
                       >
                         <X className="h-4 w-4" />
                       </Button>

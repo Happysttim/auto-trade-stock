@@ -41,6 +41,8 @@ class MarketWatchSnapshot:
     volume_ratio: float
     suspicious_volume: bool
     price_change_pct: float
+    max_affordable_quantity: int = 0
+    affordable: bool = False
 
     def to_prompt_dict(self) -> dict[str, str | float | int | bool]:
         return {
@@ -52,6 +54,8 @@ class MarketWatchSnapshot:
             "volume_ratio": round(self.volume_ratio, 4),
             "suspicious_volume": self.suspicious_volume,
             "price_change_pct": round(self.price_change_pct, 4),
+            "max_affordable_quantity": self.max_affordable_quantity,
+            "affordable": self.affordable,
         }
 
 
@@ -83,9 +87,14 @@ class AccountSnapshot:
         return self.cash_balance + self.holdings_value
 
     def holding_for_symbol(self, symbol: str) -> Holding | None:
-        normalized = symbol.upper()
+        normalized = symbol.upper().strip()
+        if normalized.endswith(".KS") or normalized.endswith(".KQ"):
+            normalized = normalized.split(".", 1)[0]
         for holding in self.holdings:
-            if holding.symbol.upper() == normalized:
+            holding_symbol = holding.symbol.upper().strip()
+            if holding_symbol.endswith(".KS") or holding_symbol.endswith(".KQ"):
+                holding_symbol = holding_symbol.split(".", 1)[0]
+            if holding_symbol == normalized:
                 return holding
         return None
 

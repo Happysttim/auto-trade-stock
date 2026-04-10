@@ -46,17 +46,17 @@ export function LogsPanel({ logs, loading }: LogsPanelProps) {
             <ScrollText className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle>System Logs</CardTitle>
-            <CardDescription>Signal analysis, proposal lifecycle, Kiwoom sync, and order errors</CardDescription>
+            <CardTitle>시스템 로그</CardTitle>
+            <CardDescription>시그널 분석, 주문 제안, 키움 동기화, 주문 오류 기록</CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {loading ? <p className="text-sm text-muted-foreground">Loading log stream...</p> : null}
+        {loading ? <p className="text-sm text-muted-foreground">로그를 불러오는 중입니다...</p> : null}
 
         {!loading && logs.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/80 p-5 text-sm text-muted-foreground">
-            System logs will appear here when the scheduler starts writing events.
+            스케줄러가 이벤트를 기록하면 시스템 로그가 여기에 표시됩니다.
           </div>
         ) : null}
 
@@ -72,7 +72,9 @@ export function LogsPanel({ logs, loading }: LogsPanelProps) {
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-foreground">{log.message}</p>
-                      <Badge variant={getBadgeVariant(log.level)}>{log.level}</Badge>
+                      <Badge variant={getBadgeVariant(log.level)}>
+                        {log.level === "error" ? "오류" : log.level === "info" ? "정보" : log.level}
+                      </Badge>
                     </div>
                     <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{log.event_type}</p>
                   </div>

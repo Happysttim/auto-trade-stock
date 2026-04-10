@@ -190,6 +190,14 @@ class Database:
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def get_market_signal(self, signal_id: int) -> dict[str, Any] | None:
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM market_signals WHERE id = ?",
+                (signal_id,),
+            ).fetchone()
+        return None if row is None else self._row_to_dict(row)
+
     def list_unprocessed_signals(self) -> list[dict[str, Any]]:
         with self.connection() as connection:
             rows = connection.execute(
@@ -197,18 +205,7 @@ class Database:
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
-    def mark_signal_processed(self, signal_id: int, *, status: str) -> None:
-        with self._lock, self.connection() as connection:
-            connection.execute(
-                """
-                UPDATE market_signals
-                SET processed = 1, processed_at = ?, execution_status = ?
-                WHERE id = ?
-                """,
-                (utc_now_iso(), status, signal_id),
-            )
-
-    def mark_signals_processed(self, signal_ids: list[int], *, status: str) -> None:
+    def update_signals_execution_status(self, signal_ids: list[int], *, status: str) -> None:
         if not signal_ids:
             return
         now = utc_now_iso()
@@ -222,6 +219,12 @@ class Database:
                 """,
                 (now, status, *signal_ids),
             )
+
+    def mark_signal_processed(self, signal_id: int, *, status: str) -> None:
+        self.update_signals_execution_status([signal_id], status=status)
+
+    def mark_signals_processed(self, signal_ids: list[int], *, status: str) -> None:
+        self.update_signals_execution_status(signal_ids, status=status)
 
     def save_trade_execution(self, payload: dict[str, Any]) -> int:
         statement = """
@@ -431,6 +434,25 @@ class Database:
                 (limit,),
             ).fetchall()
         return [self._row_to_dict(row) for row in rows]
+
+    def clear_runtime_logs_and_ai_feed(self) -> None:
+        with self._lock, self.connection() as connection:
+            connection.execute("DELETE FROM system_logs")
+            connection.execute("DELETE FROM market_signals")
+            connection.execute(
+                """
+                DELETE FROM service_state
+                WHERE state_key IN (
+                    'last_news_signature',
+                    'last_ai_summary',
+                    'last_news_cycle_at',
+                    'last_processed_signal_id'
+                )
+                """
+            )
+            connection.execute(
+                "DELETE FROM sqlite_sequence WHERE name IN ('system_logs', 'market_signals')"
+            )
 
     def get_state(self, key: str) -> str | None:
         with self.connection() as connection:

@@ -1,6 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
@@ -15,6 +15,10 @@ def _parse_clock(raw: str) -> time:
 @dataclass(slots=True)
 class MarketClock:
     settings: Settings
+    app_tz: ZoneInfo = field(init=False)
+    market_tz: ZoneInfo = field(init=False)
+    market_open_time: time = field(init=False)
+    market_close_time: time = field(init=False)
 
     def __post_init__(self) -> None:
         self.app_tz = ZoneInfo(self.settings.app_timezone)
@@ -37,3 +41,5 @@ class MarketClock:
             return False
         current_time = current.time()
         return self.market_open_time <= current_time <= self.market_close_time
+
+

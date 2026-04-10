@@ -34,6 +34,7 @@ class Settings:
     news_lookback_minutes: int
     news_max_articles: int
     watchlist_symbols: tuple[str, ...]
+    watchlist_name_map: dict[str, str]
     max_volume_spike_ratio: float
     account_max_exposure_ratio: float
     min_account_impact_ratio: float
@@ -120,6 +121,23 @@ def _google_news_rss(query: str, *, hl: str, gl: str, ceid: str) -> str:
     )
 
 
+def _normalize_symbol_key(symbol: str) -> str:
+    normalized = symbol.strip().upper()
+    if normalized.endswith(".KS") or normalized.endswith(".KQ"):
+        normalized = normalized.split(".", 1)[0]
+    return normalized
+
+
+def _normalize_name_map(raw_map: dict[str, Any]) -> dict[str, str]:
+    normalized: dict[str, str] = {}
+    for key, value in raw_map.items():
+        key_text = _normalize_symbol_key(str(key))
+        value_text = str(value).strip()
+        if key_text and value_text:
+            normalized[key_text] = value_text
+    return normalized
+
+
 def _default_news_sources() -> tuple[NewsSourceConfig, ...]:
     return (
         NewsSourceConfig(
@@ -180,6 +198,19 @@ def _default_news_sources() -> tuple[NewsSourceConfig, ...]:
     )
 
 
+def _default_watchlist_name_map() -> dict[str, str]:
+    return {
+        "005930": "삼성전자",
+        "000660": "SK하이닉스",
+        "035420": "NAVER",
+        "051910": "LG화학",
+        "068270": "셀트리온",
+        "105560": "KB금융",
+        "207940": "삼성바이오로직스",
+        "323410": "카카오뱅크",
+    }
+
+
 def load_settings() -> Settings:
     backend_root = Path(__file__).resolve().parents[1]
     load_dotenv(backend_root / ".env")
@@ -210,6 +241,9 @@ def load_settings() -> Settings:
                 "207940.KS",
                 "323410.KS",
             ),
+        ),
+        watchlist_name_map=_normalize_name_map(
+            _json_env("WATCHLIST_NAME_MAP_JSON", _default_watchlist_name_map())
         ),
         max_volume_spike_ratio=_float_env("MAX_VOLUME_SPIKE_RATIO", 4.0),
         account_max_exposure_ratio=_float_env("ACCOUNT_MAX_EXPOSURE_RATIO", 0.75),

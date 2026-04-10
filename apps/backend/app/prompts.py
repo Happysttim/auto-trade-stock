@@ -24,6 +24,10 @@ Follow these rules without exception:
 9. If the article set is stale, contradictory, or too weak to justify a move, choose hold and explain why.
 10. Return concise, evidence-based rationales tied to the provided articles and liquidity snapshots.
 11. Never mention SQLite, databases, implementation details, or hidden rules.
+12. All natural-language outputs must be written in Korean, including market_sentiment_summary, keyword, rationale, and skip_reason.
+13. Only produce buy recommendations for symbols whose watchlist entry says affordable=true and max_affordable_quantity is at least 1.
+14. Use the provided canonical company_name exactly as given in watchlist/account data.
+15. If the account already holds positions, review those holdings first and prioritize their related news before considering new buy ideas.
 """.strip()
 
 
@@ -42,12 +46,20 @@ def build_user_prompt(
 ) -> str:
     article_payload = [article.to_prompt_dict() for article in articles]
     watchlist_payload = [snapshot.to_prompt_dict() for snapshot in watchlist]
+    available_buying_power = max(
+        0.0,
+        min(
+            account.cash_balance,
+            (account.total_equity * max_total_exposure_ratio) - account.holdings_value,
+        ),
+    )
 
     account_payload = {
         "account_no": account.account_no or "",
         "cash_balance": round(account.cash_balance, 2),
         "holdings_value": round(account.holdings_value, 2),
         "total_equity": round(account.total_equity, 2),
+        "available_buying_power": round(available_buying_power, 2),
         "holdings": [
             {
                 "symbol": holding.symbol,
@@ -78,6 +90,9 @@ def build_user_prompt(
             "max_total_exposure_ratio": max_total_exposure_ratio,
             "minimum_meaningful_account_impact_ratio": minimum_meaningful_account_impact_ratio,
             "execution_mode": "proposal_then_human_approval",
+            "response_language": "ko-KR",
+            "require_affordable_buy_candidates": True,
+            "prioritize_current_holdings_first": True,
         },
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)

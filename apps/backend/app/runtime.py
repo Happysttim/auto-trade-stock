@@ -33,6 +33,7 @@ class ServiceContainer:
 def build_container(settings: Settings) -> ServiceContainer:
     repository = Database(settings.db_path)
     repository.initialize()
+    repository.clear_runtime_logs_and_ai_feed()
 
     clock = MarketClock(settings)
     market_data_service = MarketDataService(settings)

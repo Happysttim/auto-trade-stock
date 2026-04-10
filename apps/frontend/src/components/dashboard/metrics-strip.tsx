@@ -10,7 +10,7 @@ type MetricsStripProps = {
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
-    return "No data";
+    return "데이터 없음";
   }
   return new Intl.DateTimeFormat("ko-KR", {
     dateStyle: "short",
@@ -21,33 +21,33 @@ function formatDateTime(value: string | null | undefined) {
 const metricDefinitions = [
   {
     key: "market",
-    title: "Market",
+    title: "장 상태",
     icon: Landmark,
-    getValue: (data: DashboardData | null) => (data?.status.market_open ? "Open" : "Closed"),
+    getValue: (data: DashboardData | null) => (data?.status.market_open ? "열림" : "닫힘"),
     getDescription: (data: DashboardData | null) =>
-      data?.status.operating_window ? "AI working window active" : "Outside working window",
+      data?.status.operating_window ? "AI 분석 가능 시간" : "운영 시간 외",
   },
   {
     key: "signals",
-    title: "Signals",
+    title: "시그널 수",
     icon: Database,
     getValue: (data: DashboardData | null) => String(data?.status.latest_signal_count ?? 0),
-    getDescription: () => "Latest AI signals stored in SQLite",
+    getDescription: () => "SQLite에 저장된 최신 AI 시그널",
   },
   {
     key: "approvals",
-    title: "Pending Approval",
+    title: "승인 대기",
     icon: Wallet,
     getValue: (data: DashboardData | null) => String(data?.status.pending_proposal_count ?? 0),
-    getDescription: () => "Orders waiting for user confirmation",
+    getDescription: () => "사용자 확인을 기다리는 주문",
   },
   {
     key: "cycle",
-    title: "Holdings Sync",
+    title: "보유 종목 동기화",
     icon: Clock3,
     getValue: (data: DashboardData | null) => formatDateTime(data?.status.last_holdings_sync_at),
     getDescription: (data: DashboardData | null) =>
-      data?.status.active_account_no ? `Account ${data.status.active_account_no}` : "No Kiwoom account synced",
+      data?.status.active_account_no ? `계좌 ${data.status.active_account_no}` : "동기화된 키움 계좌 없음",
   },
 ];
 
@@ -67,7 +67,7 @@ export function MetricsStrip({ data, loading }: MetricsStripProps) {
                   {metric.title}
                 </p>
                 <p className="text-xl font-semibold text-foreground">
-                  {loading ? "Loading..." : metric.getValue(data)}
+                  {loading ? "불러오는 중..." : metric.getValue(data)}
                 </p>
                 <p className="text-sm text-muted-foreground">{metric.getDescription(data)}</p>
               </div>

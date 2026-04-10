@@ -37,8 +37,8 @@ export function TradesTable({ trades, loading }: TradesTableProps) {
             <CandlestickChart className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle>Order History</CardTitle>
-            <CardDescription>User-approved Kiwoom order submissions recorded by the backend</CardDescription>
+            <CardTitle>주문 이력</CardTitle>
+            <CardDescription>사용자 확인 후 키움으로 전송된 주문 기록</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -46,21 +46,21 @@ export function TradesTable({ trades, loading }: TradesTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Stock</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Quantity</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead>PnL</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Timestamp</TableHead>
+              <TableHead>종목</TableHead>
+              <TableHead>유형</TableHead>
+              <TableHead>수량</TableHead>
+              <TableHead>가격</TableHead>
+              <TableHead>총액</TableHead>
+              <TableHead>손익</TableHead>
+              <TableHead>상태</TableHead>
+              <TableHead>시각</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
                 <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                  Loading latest orders...
+                  최신 주문 이력을 불러오는 중입니다...
                 </TableCell>
               </TableRow>
             ) : null}
@@ -68,7 +68,7 @@ export function TradesTable({ trades, loading }: TradesTableProps) {
             {!loading && trades.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                  No approved orders have been recorded yet.
+                  아직 기록된 주문 이력이 없습니다.
                 </TableCell>
               </TableRow>
             ) : null}
@@ -90,7 +90,7 @@ export function TradesTable({ trades, loading }: TradesTableProps) {
                         <ArrowDownRight className="h-3.5 w-3.5" />
                       )}
                     </span>
-                    {trade.trade_type}
+                    {trade.trade_type === "buy" ? "매수" : "매도"}
                   </Badge>
                 </TableCell>
                 <TableCell>{trade.quantity.toLocaleString("ko-KR")}</TableCell>
@@ -103,7 +103,7 @@ export function TradesTable({ trades, loading }: TradesTableProps) {
                 >
                   {formatCurrency(trade.pnl)}
                 </TableCell>
-                <TableCell>{trade.status}</TableCell>
+                <TableCell>{{ submitted: "전송 완료" }[trade.status] ?? trade.status}</TableCell>
                 <TableCell className="text-muted-foreground">{formatDateTime(trade.executed_at)}</TableCell>
               </TableRow>
             ))}

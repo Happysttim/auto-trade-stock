@@ -10,6 +10,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:opacity-90",
+        success: "bg-emerald-600 text-white hover:bg-emerald-500",
+        danger: "bg-rose-600 text-white hover:bg-rose-500",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-secondary hover:text-secondary-foreground",
       },

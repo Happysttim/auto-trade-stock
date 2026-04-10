@@ -30,19 +30,19 @@ export function HoldingsPanel({ holdings, accountNo, loading }: HoldingsPanelPro
             <Wallet className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle>Kiwoom Holdings</CardTitle>
+            <CardTitle>키움 보유 종목</CardTitle>
             <CardDescription>
-              {accountNo ? `Live snapshot for account ${accountNo}` : "Latest broker holdings snapshot"}
+              {accountNo ? `계좌 ${accountNo}의 최신 보유 현황` : "가장 최근에 동기화된 보유 현황"}
             </CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {loading ? <p className="text-sm text-muted-foreground">Loading holdings snapshot...</p> : null}
+        {loading ? <p className="text-sm text-muted-foreground">보유 종목을 불러오는 중입니다...</p> : null}
 
         {!loading && holdings.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/80 p-5 text-sm text-muted-foreground">
-            No holdings have been synced from Kiwoom yet.
+            아직 키움에서 동기화된 보유 종목이 없습니다.
           </div>
         ) : null}
 
@@ -54,28 +54,28 @@ export function HoldingsPanel({ holdings, accountNo, loading }: HoldingsPanelPro
                 <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{holding.symbol}</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-semibold">{holding.quantity.toLocaleString("ko-KR")} shares</p>
+                <p className="text-sm font-semibold">{holding.quantity.toLocaleString("ko-KR")}주</p>
                 <p className="text-xs text-muted-foreground">
-                  Available {holding.available_quantity.toLocaleString("ko-KR")}
+                  주문 가능 {holding.available_quantity.toLocaleString("ko-KR")}주
                 </p>
               </div>
             </div>
 
             <div className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <p className="text-muted-foreground">Average Price</p>
+                <p className="text-muted-foreground">평균 단가</p>
                 <p className="font-semibold">{formatCurrency(holding.average_price)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Current Price</p>
+                <p className="text-muted-foreground">현재가</p>
                 <p className="font-semibold">{formatCurrency(holding.current_price)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Market Value</p>
+                <p className="text-muted-foreground">평가 금액</p>
                 <p className="font-semibold">{formatCurrency(holding.market_value)}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">PnL</p>
+                <p className="text-muted-foreground">손익</p>
                 <p className={holding.pnl != null && holding.pnl < 0 ? "font-semibold text-danger" : "font-semibold text-success"}>
                   {formatCurrency(holding.pnl)}
                 </p>
